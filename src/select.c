@@ -6,7 +6,7 @@
 int linearSearch(char *str, char *strArray[]);
 
 int main(int argc, char *argv[]) {
-    if (argc != 3) {
+    if (argc > 3) {
         printf("An unexpected number of arguments was given.\n");
 
         return 1;
@@ -17,7 +17,7 @@ int main(int argc, char *argv[]) {
     if (index >= 0) {
         inFile = fopen(argv[index+1], "r");
     } else {
-        inFile = fopen(stdin, "r");
+        inFile = stdin;
     }
 
     if (inFile == NULL) {
@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
 int linearSearch(char *str, char *strArray[]) {
     int i = 0;
     while (strArray[i] != NULL) {
-        if (!strcomp(str, strArray[i])) {
+        if (!strcmp(str, strArray[i])) {
             return i;
         }
 
