@@ -1,4 +1,6 @@
+#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define MAX_DATA 100
@@ -7,11 +9,21 @@
  * NOTES
  *
  * Program will work even if extra information is added in the command line with no tag.
- * E.g. select -c "salary > 2000" -h this-should-not-be-here -i ../data/employees.csv -o ../data/output.csv
+ * E.g. select -c "salary > 2000" "this should not be here" -i ../data/employees.csv -o ../data/output.csv
  * This should probably be fixed.
  */
 
+typedef struct Condition {
+    char *operator;
+    char *operand1;
+    char *operand2;
+} Condition;
+
 int linearSearch(char *str, char *strArray[]);
+
+Condition *interpretCondition(char *conditionString, int hasHeader);
+
+void Condition_destroy(Condition *condition);
 
 int main(int argc, char *argv[]) {
     // Checks for a sensible number of arguments
@@ -22,13 +34,13 @@ int main(int argc, char *argv[]) {
     }
 
     // Initializes variables
-    int i = 0;
     char str[MAX_DATA] = "";
     int index = 0;
     int hasHeader = (linearSearch("-h", argv) >= 0) ? 1 : 0;
+    Condition *condition;
 
     // Gets condition
-    char *condition = "";
+    char *conditionString = "";
     index = linearSearch("-c", argv);
     if (index >= 0) {
         if ((argc <= index+1) || (argv[index+1][0] == '-')) {
@@ -37,12 +49,14 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        condition = argv[index+1];
+        conditionString = argv[index+1];
     } else {
-        fprintf("The \"-c\" tag is required.\n");
+        fprintf(stderr, "The \"-c\" tag is required.\n");
 
         return 1;
     }
+
+    condition = interpretCondition(conditionString, hasHeader);
 
     // Sets input file
     FILE *inFile;
@@ -84,7 +98,7 @@ int main(int argc, char *argv[]) {
 
     // Temporary code for debugging purposes
     printf("hasHeader: %d\n", hasHeader);
-    printf("condition: %s\n", condition);
+    printf("operator: %s\noperand1: %s\noperand2: %s\n", condition->operator, condition->operand1, condition->operand2);
 
     // Gets and prints data
     while ((fgets(str, MAX_DATA - 1, inFile) != NULL) && (strcmp(str, "\n"))) {
@@ -92,6 +106,7 @@ int main(int argc, char *argv[]) {
     }
 
     // Frees resources
+    Condition_destroy(condition);
     fclose(inFile);
     fclose(outFile);
 
@@ -111,4 +126,26 @@ int linearSearch(char *str, char *strArray[]) {
     }
 
     return -1;
+}
+
+Condition *interpretCondition(char *conditionString, int hasHeader) {
+    Condition *condition = malloc(sizeof(Condition));
+    char *newConditionString = strdup(conditionString);
+    const char *delim = " ";
+
+    condition->operand1 = strtok(newConditionString, delim);
+    condition->operator = strtok(NULL, delim);
+    condition->operand2 = strtok(NULL, delim);
+
+    return condition;
+}
+
+void Condition_destroy(Condition *condition) {
+    assert(condition != NULL);
+
+    free(condition->operator);
+    free(condition->operand1);
+    free(condition->operand2);
+
+    free(condition);
 }
