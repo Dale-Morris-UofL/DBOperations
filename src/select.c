@@ -23,6 +23,8 @@ int linearSearch(char *str, char *strArray[]);
 
 Condition *interpretCondition(char *conditionString, int hasHeader);
 
+Condition *copyCondition(Condition *condition);
+
 void Condition_destroy(Condition *condition);
 
 int main(int argc, char *argv[]) {
@@ -34,12 +36,12 @@ int main(int argc, char *argv[]) {
     }
 
     // Initializes variables
-    char str[MAX_DATA] = "";
     int index = 0;
     int hasHeader = (linearSearch("-h", argv) >= 0) ? 1 : 0;
-    Condition *condition;
+    char line[MAX_DATA] = "";
 
     // Gets condition
+    Condition *mainCondition;
     char *conditionString = "";
     index = linearSearch("-c", argv);
     if (index >= 0) {
@@ -56,7 +58,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    condition = interpretCondition(conditionString, hasHeader);
+    mainCondition = interpretCondition(conditionString, hasHeader);
 
     // Sets input file
     FILE *inFile;
@@ -98,15 +100,71 @@ int main(int argc, char *argv[]) {
 
     // Temporary code for debugging purposes
     printf("hasHeader: %d\n", hasHeader);
-    printf("operator: %s\noperand1: %s\noperand2: %s\n", condition->operator, condition->operand1, condition->operand2);
+    printf("operator: %s\noperand1: %s\noperand2: %s\n", mainCondition->operator, mainCondition->operand1, mainCondition->operand2);
+
+    // Simplifies both header cases to a single case
+    char *header = "";
+    char *columnName = "";
+    int columnNum = 0;
+    const char *headerDelim = ",";
+    if (hasHeader) {
+        header = fgets(line, MAX_DATA - 1, inFile);
+
+        columnName = strtok(header, headerDelim);
+        columnNum = 0;
+        while (strcmp(columnName, mainCondition->operand1)) {
+            columnName = strtok(NULL, headerDelim);
+            columnNum++;
+        }
+    } else {
+        columnNum = atoi(strdup(mainCondition->operand1) + 1) - 1;
+    }
+
+    // For debugging
+    printf("%s is column number %d\n", columnName, columnNum+1);
 
     // Gets and prints data
-    while ((fgets(str, MAX_DATA - 1, inFile) != NULL) && (strcmp(str, "\n"))) {
-        fprintf(outFile, "%s", str);
+    char *attribute = "";
+    int printable = 0;
+    const char *lineDelim = ",";
+    int i = 0;
+    char *lineCopy = "";
+    while ((fgets(line, MAX_DATA - 1, inFile) != NULL) && (strcmp(line, "\n"))) {
+        lineCopy = strdup(line);
+        
+        // Gets the relevant attribute from the current line
+        attribute = strtok(lineCopy, lineDelim);
+        i = 0;
+        while (i < columnNum) {
+            attribute = strtok(NULL, lineDelim);
+            i++;
+        }
+        lineCopy = strdup(line);
+
+        // Determines whether the current line meets the condition
+        printable = 0;
+        if (!strcmp(mainCondition->operator, "==")) {
+            printable = !strcmp(attribute, mainCondition->operand2);
+        } else if (!strcmp(mainCondition->operator, "<")) {
+            printable = atoi(attribute) < atoi(mainCondition->operand2);
+        } else if (!strcmp(mainCondition->operator, "<=")) {
+            printable = atoi(attribute) <= atoi(mainCondition->operand2);
+        } else if (!strcmp(mainCondition->operator, ">")) {
+            printable = atoi(attribute) > atoi(mainCondition->operand2);
+        } else if (!strcmp(mainCondition->operator, ">=")) {
+            printable = atoi(attribute) >= atoi(mainCondition->operand2);
+        } else {
+            printable = 0;
+        }
+
+        // Prints the current line if it's supposed to be printed
+        if (printable) {
+            fprintf(outFile, "%s", line);
+        }
     }
 
     // Frees resources
-    Condition_destroy(condition);
+    Condition_destroy(mainCondition);
     fclose(inFile);
     fclose(outFile);
 
@@ -140,8 +198,22 @@ Condition *interpretCondition(char *conditionString, int hasHeader) {
     return condition;
 }
 
+Condition *copyCondition(Condition *condition) {
+    Condition *copy = malloc(sizeof(Condition));
+
+    copy->operator = strdup(condition->operator);
+    copy->operand1 = strdup(condition->operand1);
+    copy->operand2 = strdup(condition->operand2);
+
+    return copy;
+}
+
 void Condition_destroy(Condition *condition) {
     assert(condition != NULL);
+
+    condition->operator = NULL;
+    condition->operand1 = NULL;
+    condition->operand2 = NULL;
 
     free(condition->operator);
     free(condition->operand1);
