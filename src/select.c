@@ -98,10 +98,6 @@ int main(int argc, char *argv[]) {
         outFile = stdout;
     }
 
-    // Temporary code for debugging purposes
-    printf("hasHeader: %d\n", hasHeader);
-    printf("operator: %s\noperand1: %s\noperand2: %s\n", mainCondition->operator, mainCondition->operand1, mainCondition->operand2);
-
     // Simplifies both header cases to a single case
     char *header = "";
     char *columnName = "";
@@ -119,9 +115,6 @@ int main(int argc, char *argv[]) {
     } else {
         columnNum = atoi(strdup(mainCondition->operand1) + 1) - 1;
     }
-
-    // For debugging
-    printf("%s is column number %d\n", columnName, columnNum+1);
 
     // Gets and prints data
     char *attribute = "";
