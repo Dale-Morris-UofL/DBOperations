@@ -74,8 +74,6 @@ int main(int argc, char *argv[]) {
     Condition *mainCondition;
     mainCondition = interpretCondition(conditionString, hasHeader);
 
-    printf("Condition: %s\nOperator: %s\nOperand1: %s\nOperand2: %s\n", conditionString, mainCondition->operator, mainCondition->operand1, mainCondition->operand2); // Debug
-
     // Sets input file
     if (strcmp("", inFileName)) {
         inFile = fopen(inFileName, "r");
