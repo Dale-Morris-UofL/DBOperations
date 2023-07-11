@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #define MAX_DATA 100
 
@@ -19,8 +20,6 @@ typedef struct Condition {
     char *operand2;
 } Condition;
 
-int linearSearch(char *str, char *strArray[]);
-
 Condition *interpretCondition(char *conditionString, int hasHeader);
 
 Condition *copyCondition(Condition *condition);
@@ -28,77 +27,78 @@ Condition *copyCondition(Condition *condition);
 void Condition_destroy(Condition *condition);
 
 int main(int argc, char *argv[]) {
-    // Checks for a sensible number of arguments
-    if (argc > 8) {
-        fprintf(stderr, "An unexpected number of arguments was given.\n");
+    // Messages
+    char *usageMessage = "usage: select -c condition [-h] [-i input-filename] [-o output-filename]";
 
+    // Initializes variables for args
+    int opt;
+    char *conditionString = "";
+    int hasHeader = 0;
+    char *inFileName = "";
+    char *outFileName = "";
+    FILE *inFile;
+    FILE *outFile;
+
+    // Gets args
+    while ((opt = getopt(argc, argv, ":c:hi:o:")) != -1) {
+        switch (opt) {
+            case 'c':
+                conditionString = strdup(optarg);
+                break;
+            case 'h':
+                hasHeader = 1;
+                break;
+            case 'i':
+                inFileName = strdup(optarg);
+                break;
+            case 'o':
+                outFileName = strdup(optarg);
+                break;
+            case ':':
+                fprintf(stderr, "%s", usageMessage);
+                return 1;
+            case '?':
+                fprintf(stderr, "%s", usageMessage);
+                return 1;
+        }
+    }
+
+    if ((!strcmp("", conditionString)) || (optind < argc)) {
+        fprintf(stderr, "%s", usageMessage);
         return 1;
     }
 
-    // Initializes variables
-    int index = 0;
-    int hasHeader = (linearSearch("-h", argv) >= 0) ? 1 : 0;
-    char line[MAX_DATA] = "";
+    // Initializes other variables
 
     // Gets condition
     Condition *mainCondition;
-    char *conditionString = "";
-    index = linearSearch("-c", argv);
-    if (index >= 0) {
-        if ((argc <= index+1) || (argv[index+1][0] == '-')) {
-            fprintf(stderr, "\"-c\" should be followed by a condition.\n");
-
-            return 1;
-        }
-
-        conditionString = argv[index+1];
-    } else {
-        fprintf(stderr, "The \"-c\" tag is required.\n");
-
-        return 1;
-    }
-
     mainCondition = interpretCondition(conditionString, hasHeader);
 
+    printf("Condition: %s\nOperator: %s\nOperand1: %s\nOperand2: %s\n", conditionString, mainCondition->operator, mainCondition->operand1, mainCondition->operand2); // Debug
+
     // Sets input file
-    FILE *inFile;
-    index = linearSearch("-i", argv);
-    if (index >= 0) {
-        if ((argc <= index+1) || (argv[index+1][0] == '-')) {
-            fprintf(stderr, "\"-i\" should be followed by a file name.\n");
-
-            return 1;
-        }
-
-        inFile = fopen(argv[index+1], "r");
+    if (strcmp("", inFileName)) {
+        inFile = fopen(inFileName, "r");
     } else {
         inFile = stdin;
     }
 
     if (inFile == NULL) {
-        fprintf(stderr, "File cannot be opened.\n");
+        fprintf(stderr, "File cannot be opened\n");
         fclose(inFile);
 
         return 1;
     }
 
     // Sets output file
-    FILE *outFile;
-    index = linearSearch("-o", argv);
-    if (index >= 0) {
-        if ((argc <= index+1) || (argv[index+1][0] == '-')) {
-            fprintf(stderr, "\"-o\" should be followed by a file name.\n");
-            fclose(inFile);
-
-            return 1;
-        }
-
-        outFile = fopen(argv[index+1], "w");
+    if (strcmp("", outFileName)) { 
+        outFile = fopen(outFileName, "w");
     } else {
         outFile = stdout;
     }
 
     // Simplifies both header cases to a single case
+    char line[MAX_DATA] = "";
     char *header = "";
     char *columnName = "";
     int columnNum = 0;
@@ -163,20 +163,6 @@ int main(int argc, char *argv[]) {
 
     // Returns
     return 0;
-}
-
-// Basic linear search for an array of strings
-int linearSearch(char *str, char *strArray[]) {
-    int i = 0;
-    while (strArray[i] != NULL) {
-        if (!strcmp(str, strArray[i])) {
-            return i;
-        }
-
-        i++;
-    }
-
-    return -1;
 }
 
 Condition *interpretCondition(char *conditionString, int hasHeader) {
