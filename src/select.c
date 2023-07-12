@@ -6,14 +6,6 @@
 
 #define MAX_DATA 100
 
-/*
- * NOTES
- *
- * Program will work even if extra information is added in the command line with no tag.
- * E.g. select -c "salary > 2000" "this should not be here" -i ../data/employees.csv -o ../data/output.csv
- * This should probably be fixed.
- */
-
 typedef struct Condition {
     char *operator;
     char *operand1;
@@ -67,8 +59,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "%s", usageMessage);
         return 1;
     }
-
-    // Initializes other variables
 
     // Gets condition
     Condition *mainCondition;
