@@ -33,9 +33,12 @@ int main(int argc, char *argv[]) {
     printf("isEmpty: %d\n", isEmpty(stack1));
 
     // TEST 2: Add many elements to trigger expand, then pop each one and check capacity
+    char *temp = malloc(100 * sizeof(char));
     int i;
     for (i = 0; i < 100; i++) {
-        push(stack1, itoa(i));
+        sprintf(temp, "%d", i);
+        push(stack1, temp);
+        printf("%d pushed to stack\n", i);
     }
 
     printf("---- START ----\n");
@@ -48,6 +51,7 @@ int main(int argc, char *argv[]) {
 
     // Free resources
     Stack_destroy(stack1);
+    free(temp);
 
     return 0;
 }
