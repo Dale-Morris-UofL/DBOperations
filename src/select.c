@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +26,8 @@ Condition *interpretCondition(char *conditionString, int hasHeader);
 Condition *copyCondition(Condition *condition);
 
 void Condition_destroy(Condition *condition);
+
+int isNumber(char *string);
 
 int main(int argc, char *argv[]) {
     // Messages
@@ -68,11 +71,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Initializes other variables
-
     // Gets condition
     Condition *mainCondition;
     mainCondition = interpretCondition(conditionString, hasHeader);
+    int attribute2isConstant = isNumber(mainCondition->operand2);
 
     // Sets input file
     if (strcmp("", inFileName)) {
@@ -98,11 +100,15 @@ int main(int argc, char *argv[]) {
     // Simplifies both header cases to a single case
     char line[MAX_DATA] = "";
     char *header = "";
+    char *header2 = "";
     char *columnName = "";
+    char *columnName2 = "";
     int columnNum = 0;
+    int columnNum2 = 0;
     const char *headerDelim = ",";
     if (hasHeader) {
         header = fgets(line, MAX_DATA - 1, inFile);
+        header2 = strdup(header);
 
         columnName = strtok(header, headerDelim);
         columnNum = 0;
@@ -110,40 +116,68 @@ int main(int argc, char *argv[]) {
             columnName = strtok(NULL, headerDelim);
             columnNum++;
         }
+
+        if (!attribute2isConstant) {
+            columnName2 = strtok(header2, headerDelim);
+            columnNum2 = 0;
+
+            while (strcmp(columnName2, mainCondition->operand2)) {
+                columnName2 = strtok(NULL, headerDelim);
+                columnNum2++;
+            }
+        }
     } else {
         columnNum = atoi(strdup(mainCondition->operand1) + 1) - 1;
+        if (!attribute2isConstant) {
+            columnNum2 = atoi(strdup(mainCondition->operand2) + 1) - 1;
+        }
     }
 
     // Gets and prints data
-    char *attribute = "";
+    char *attribute1 = "";
+    char *attribute2 = "";
     int printable = 0;
     const char *lineDelim = ",";
     int i = 0;
     char *lineCopy = "";
+    char *lineCopy2 = "";
     while ((fgets(line, MAX_DATA - 1, inFile) != NULL) && (strcmp(line, "\n"))) {
         lineCopy = strdup(line);
+        lineCopy2 = strdup(line);
         
-        // Gets the relevant attribute from the current line
-        attribute = strtok(lineCopy, lineDelim);
+        // Gets the relevant attributes from the current line
+        attribute1 = strtok(lineCopy, lineDelim);
         i = 0;
         while (i < columnNum) {
-            attribute = strtok(NULL, lineDelim);
+            attribute1 = strtok(NULL, lineDelim);
             i++;
         }
         lineCopy = strdup(line);
 
+        if (attribute2isConstant) {
+            attribute2 = strdup(mainCondition->operand2);
+        } else {
+            attribute2 = strtok(lineCopy2, lineDelim);
+            i = 0;
+            while (i < columnNum2) {
+                attribute2 = strtok(NULL, lineDelim);
+                i++;
+            }
+        }
+        lineCopy2 = strdup(line);
+
         // Determines whether the current line meets the condition
         printable = 0;
         if (!strcmp(mainCondition->operator, "==")) {
-            printable = !strcmp(attribute, mainCondition->operand2);
+            printable = !strcmp(attribute1, attribute2);
         } else if (!strcmp(mainCondition->operator, "<")) {
-            printable = atoi(attribute) < atoi(mainCondition->operand2);
+            printable = atoi(attribute1) < atoi(attribute2);
         } else if (!strcmp(mainCondition->operator, "<=")) {
-            printable = atoi(attribute) <= atoi(mainCondition->operand2);
+            printable = atoi(attribute1) <= atoi(attribute2);
         } else if (!strcmp(mainCondition->operator, ">")) {
-            printable = atoi(attribute) > atoi(mainCondition->operand2);
+            printable = atoi(attribute1) > atoi(attribute2);
         } else if (!strcmp(mainCondition->operator, ">=")) {
-            printable = atoi(attribute) >= atoi(mainCondition->operand2);
+            printable = atoi(attribute1) >= atoi(attribute2);
         } else {
             printable = 0;
         }
@@ -197,4 +231,14 @@ void Condition_destroy(Condition *condition) {
     free(condition->operand2);
 
     free(condition);
+}
+
+int isNumber(char *string) {
+    int i;
+    for (i = 0; string[i] != '\0'; i++) {
+        if (!isdigit(string[i])) {
+            return 0;
+        }
+    }
+    return 1;
 }
