@@ -33,16 +33,17 @@ int main(int argc, char *argv[]) {
     printf("isEmpty: %d\n", isEmpty(stack1));
 
     // TEST 2: Add many elements to trigger expand, then pop each one and check capacity
-    char *temp = malloc(100 * sizeof(char));
+    char *temp = malloc(MAX_STRING_SIZE * sizeof(char));
     int i;
-    for (i = 0; i < 100; i++) {
+    for (i = 0; i < 11; i++) {
         sprintf(temp, "%d", i);
         push(stack1, temp);
         printf("%d pushed to stack\n", i);
     }
 
+    int high = 11;
     printf("---- START ----\n");
-    for (i = 0; i < 100; i++) {
+    for (i = 0; i < high; i++) {
         printf("Num: %s\n", pop(stack1));
     }
     printf("---- END ----\n");
@@ -63,7 +64,9 @@ Stack *Stack_create() {
     Stack *stack = (Stack *) malloc(sizeof(Stack));
     stack->capacity = INIT_CAPACITY;
     stack->size = 0;
-    stack->contents = (char **) malloc(stack->capacity * sizeof(char) * MAX_STRING_SIZE);
+    stack->contents = (char **) malloc(stack->capacity);
+    printf("Stack capacity: %d\n", stack->capacity);
+    printf("Size of stack contents: %ld\n", sizeof(stack->contents));
 
     return stack;
 }
@@ -80,11 +83,11 @@ void Stack_destroy(Stack *stack) {
 /*
  * Pushes the given element onto the given stack
  */
-void push(Stack *stack, char *element) {
+void push(Stack *stack, char element[]) {
     if (isFull(stack)) {
         expand(stack);
     }
-    stack->contents[++stack->size] = strdup(element);
+    stack->contents[++stack->size] = element;
 }
 
 /*
@@ -94,7 +97,7 @@ char *pop(Stack *stack) {
     if (isEmpty(stack)) {
         return NULL;
     }
-    return strdup(stack->contents[stack->size--]);
+    return stack->contents[stack->size--];
 }
 
 /*
@@ -104,7 +107,7 @@ char *peek(Stack *stack) {
     if (isEmpty(stack)) {
         return NULL;
     }
-    return strdup(stack->contents[stack->size]);
+    return stack->contents[stack->size];
 }
 
 /*
