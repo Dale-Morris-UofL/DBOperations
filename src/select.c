@@ -5,33 +5,15 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "condition.h"
+
 #define MAX_DATA 100
-
-/*
- * NOTES
- *
- * Program will work even if extra information is added in the command line with no tag.
- * E.g. select -c "salary > 2000" "this should not be here" -i ../data/employees.csv -o ../data/output.csv
- * This should probably be fixed.
- */
-
-typedef struct Condition {
-    char *operator;
-    char *operand1;
-    char *operand2;
-} Condition;
-
-Condition *interpretCondition(char *conditionString, int hasHeader);
-
-Condition *copyCondition(Condition *condition);
-
-void Condition_destroy(Condition *condition);
 
 int isNumber(char *string);
 
 int main(int argc, char *argv[]) {
     // Messages
-    char *usageMessage = "usage: select -c condition [-h] [-i input-filename] [-o output-filename]";
+    char *usageMessage = "Usage: select -c condition [-h] [-i input-file] [-o output-file]";
 
     // Initializes variables for args
     int opt;
@@ -71,11 +53,6 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Gets condition
-    Condition *mainCondition;
-    mainCondition = interpretCondition(conditionString, hasHeader);
-    int attribute2isConstant = isNumber(mainCondition->operand2);
-
     // Sets input file
     if (strcmp("", inFileName)) {
         inFile = fopen(inFileName, "r");
@@ -97,16 +74,27 @@ int main(int argc, char *argv[]) {
         outFile = stdout;
     }
 
-    // Simplifies both header cases to a single case
-    char line[MAX_DATA] = "";
-    char *header = "";
-    char *header2 = "";
-    char *columnName = "";
-    char *columnName2 = "";
-    int columnNum = 0;
-    int columnNum2 = 0;
-    const char *headerDelim = ",";
-    if (hasHeader) {
+    // Gets condition
+    Condition *mainCondition;
+    mainCondition = interpretCondition(conditionString);
+
+    // Simplifies condition
+    char line[MAX_DATA];
+    const char *lineDelim = ",";
+    char *currentAttr;
+    int attrNum;
+
+    if (!isNumber(mainCondition->operand1) && (strcmp("\"", mainCondition->operand1[0]) && strcmp("'", mainCondition->operand1[0]))) {
+        // operand1 is a column name, convert it to column number
+        currentAttr = strtok(line, lineDelim);
+        attrNum = 0;
+        while (strcmp(currentAttr, mainCondition->operand1)) {
+            currentAttr = strtok(NULL, lineDelim);
+            attrNum++;
+        }
+    }
+
+    /*if (hasHeader) {
         header = fgets(line, MAX_DATA - 1, inFile);
         header2 = strdup(header);
 
@@ -131,13 +119,12 @@ int main(int argc, char *argv[]) {
         if (!attribute2isConstant) {
             columnNum2 = atoi(strdup(mainCondition->operand2) + 1) - 1;
         }
-    }
+    }*/
 
     // Gets and prints data
     char *attribute1 = "";
     char *attribute2 = "";
     int printable = 0;
-    const char *lineDelim = ",";
     int i = 0;
     char *lineCopy = "";
     char *lineCopy2 = "";
@@ -197,48 +184,26 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-Condition *interpretCondition(char *conditionString, int hasHeader) {
-    Condition *condition = malloc(sizeof(Condition));
-    char *newConditionString = strdup(conditionString);
-    const char *delim = " ";
-
-    condition->operand1 = strtok(newConditionString, delim);
-    condition->operator = strtok(NULL, delim);
-    condition->operand2 = strtok(NULL, delim);
-
-    return condition;
-}
-
-Condition *copyCondition(Condition *condition) {
-    Condition *copy = malloc(sizeof(Condition));
-
-    copy->operator = strdup(condition->operator);
-    copy->operand1 = strdup(condition->operand1);
-    copy->operand2 = strdup(condition->operand2);
-
-    return copy;
-}
-
-void Condition_destroy(Condition *condition) {
-    assert(condition != NULL);
-
-    condition->operator = NULL;
-    condition->operand1 = NULL;
-    condition->operand2 = NULL;
-
-    free(condition->operator);
-    free(condition->operand1);
-    free(condition->operand2);
-
-    free(condition);
-}
-
 int isNumber(char *string) {
+    if (string[0] != '-' && string[0] != '.' && !isdigit(string[0])) {
+        return 0;
+    }
+    
+    int hasDecimal = 0;
     int i;
-    for (i = 0; string[i] != '\0'; i++) {
-        if (!isdigit(string[i])) {
+    for (i = 1; string[i] != '\0'; i++) {
+        if (string[i] != '.' && !isdigit(string[i])) {
             return 0;
         }
+
+        if (hasDecimal && string[i] == '.') {
+            return 0;
+        }
+
+        if (string[i] == '.') {
+            hasDecimal = 1;
+        }
     }
+
     return 1;
 }
