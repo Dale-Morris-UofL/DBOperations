@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -14,6 +15,8 @@ Condition *interpretCondition(char *conditionString) {
     condition->operand1 = strtok(newConditionString, delim);
     condition->operator = strtok(NULL, delim);
     condition->operand2 = strtok(NULL, delim);
+
+    free(newConditionString);
 
     return condition;
 }

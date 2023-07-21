@@ -1,4 +1,3 @@
-#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,15 +6,17 @@
 
 #include "condition.h"
 
-#define MAX_DATA 100
+#define MAX_DATA 1024
 
 int isNumber(char *string);
 
 int main(int argc, char *argv[]) {
-    // Messages
-    char *usageMessage = "Usage: select -c condition [-h] [-i input-file] [-o output-file]";
+    // Preset messages
+    const char *usageMessage = "Usage: %s -c condition [-h] [-i input-file] [-o output-file]";
+    const char *invalidConditionMessage = "Invalid condition";
+    const char *unknownErrorMessage = "An unknown error has occurred";
 
-    // Initializes variables for args
+    // Get args
     int opt;
     char *conditionString = "";
     int hasHeader = 0;
@@ -24,7 +25,6 @@ int main(int argc, char *argv[]) {
     FILE *inFile;
     FILE *outFile;
 
-    // Gets args
     while ((opt = getopt(argc, argv, ":c:hi:o:")) != -1) {
         switch (opt) {
             case 'c':
@@ -40,20 +40,20 @@ int main(int argc, char *argv[]) {
                 outFileName = strdup(optarg);
                 break;
             case ':':
-                fprintf(stderr, "%s", usageMessage);
+                fprintf(stderr, usageMessage, argv[0]);
                 return 1;
             case '?':
-                fprintf(stderr, "%s", usageMessage);
+                fprintf(stderr, usageMessage, argv[0]);
                 return 1;
         }
     }
 
     if ((!strcmp("", conditionString)) || (optind < argc)) {
-        fprintf(stderr, "%s", usageMessage);
+        fprintf(stderr, usageMessage, argv[0]);
         return 1;
     }
 
-    // Sets input file
+    // Set input and output file
     if (strcmp("", inFileName)) {
         inFile = fopen(inFileName, "r");
     } else {
@@ -67,120 +67,215 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Sets output file
     if (strcmp("", outFileName)) { 
         outFile = fopen(outFileName, "w");
     } else {
         outFile = stdout;
     }
 
-    // Gets condition
-    Condition *mainCondition;
-    mainCondition = interpretCondition(conditionString);
-
-    // Simplifies condition
+    // Get condition
     char line[MAX_DATA];
+    char *lineCopy;
     const char *lineDelim = ",";
     char *currentAttr;
     int attrNum;
+    char *attrNumString = (char *) malloc(32 * sizeof(char));
 
-    if (!isNumber(mainCondition->operand1) && (strcmp("\"", mainCondition->operand1[0]) && strcmp("'", mainCondition->operand1[0]))) {
-        // operand1 is a column name, convert it to column number
-        currentAttr = strtok(line, lineDelim);
-        attrNum = 0;
-        while (strcmp(currentAttr, mainCondition->operand1)) {
-            currentAttr = strtok(NULL, lineDelim);
-            attrNum++;
+    Condition *mainCondition;
+    mainCondition = interpretCondition(conditionString);
+
+    if (hasHeader) {
+        fgets(line, MAX_DATA - 1, inFile);
+
+        if (!isNumber(mainCondition->operand1) && ('"' != mainCondition->operand1[0] && '\'' != mainCondition->operand1[0])) {
+            // Set attribute info
+            lineCopy = strdup(line);
+            currentAttr = strtok(lineCopy, lineDelim);
+            attrNum = 0;
+            while (strcmp(currentAttr, mainCondition->operand1)) {
+                currentAttr = strtok(NULL, lineDelim);
+                attrNum++;
+            }
+            free(lineCopy);
+
+            sprintf(attrNumString, "%d", attrNum);
+
+            // Convert operand to column number representation
+            mainCondition->operand1 = (char *) malloc((2 + strlen(attrNumString)) * sizeof(char));
+            strcpy(mainCondition->operand1, "#");
+            strcat(mainCondition->operand1, attrNumString);
         }
+
+        if (!isNumber(mainCondition->operand2) && ('"' != mainCondition->operand2[0] && '\'' != mainCondition->operand2[0])) {
+            // Set attribute info
+            lineCopy = strdup(line);
+            currentAttr = strtok(line, lineDelim);
+            attrNum = 0;
+            while (strcmp(currentAttr, mainCondition->operand2)) {
+                currentAttr = strtok(NULL, lineDelim);
+                attrNum++;
+            }
+            free(lineCopy);
+
+            sprintf(attrNumString, "%d", attrNum);
+
+            // Convert operand to column number representation
+            mainCondition->operand2 = (char *) malloc((2 + strlen(attrNumString)) * sizeof(char));
+            strcpy(mainCondition->operand2, "#");
+            strcat(mainCondition->operand2, attrNumString);
+        }
+    } else if ((!isNumber(mainCondition->operand1) && ('"' != mainCondition->operand1[0] && '\'' != mainCondition->operand1[0])) ||
+            (!isNumber(mainCondition->operand2) && ('"' != mainCondition->operand2[0] && '\'' != mainCondition->operand2[0]))) {
+        fprintf(stderr, invalidConditionMessage);
+
+        free(attrNumString);
+
+        Condition_destroy(mainCondition);
+        free(inFile);
+        free(outFile);
+
+        return 1;
+    }
+    free(attrNumString);
+
+    // Double check condition is valid
+    if (('#' != mainCondition->operand1[0] &&
+            !isNumber(mainCondition->operand1) && 
+            (('"' != mainCondition->operand1[0] || '"' != mainCondition->operand1[-1 + strlen(mainCondition->operand1)]) && 
+            ('\'' != mainCondition->operand1[0] || '\'' != mainCondition->operand1[-1 + strlen(mainCondition->operand1)]))) || 
+            ('#' != mainCondition->operand2[0] && 
+            !isNumber(mainCondition->operand2) && 
+            (('"' != mainCondition->operand2[0] || '"' != mainCondition->operand2[-1 + strlen(mainCondition->operand2)]) && 
+            ('\'' != mainCondition->operand2[0] || '\'' != mainCondition->operand2[-1 + strlen(mainCondition->operand2)]))) && 
+            (!strcmp("==", mainCondition->operator) || !strcmp("<", mainCondition->operator) || !strcmp("<=", mainCondition->operator) || 
+            !strcmp(">", mainCondition->operator) || !strcmp(">=", mainCondition->operator))) {
+        fprintf(stderr, invalidConditionMessage);
+
+        Condition_destroy(mainCondition);
+        free(inFile);
+        free(outFile);
+
+        return 1;
     }
 
-    /*if (hasHeader) {
-        header = fgets(line, MAX_DATA - 1, inFile);
-        header2 = strdup(header);
-
-        columnName = strtok(header, headerDelim);
-        columnNum = 0;
-        while (strcmp(columnName, mainCondition->operand1)) {
-            columnName = strtok(NULL, headerDelim);
-            columnNum++;
-        }
-
-        if (!attribute2isConstant) {
-            columnName2 = strtok(header2, headerDelim);
-            columnNum2 = 0;
-
-            while (strcmp(columnName2, mainCondition->operand2)) {
-                columnName2 = strtok(NULL, headerDelim);
-                columnNum2++;
-            }
-        }
-    } else {
-        columnNum = atoi(strdup(mainCondition->operand1) + 1) - 1;
-        if (!attribute2isConstant) {
-            columnNum2 = atoi(strdup(mainCondition->operand2) + 1) - 1;
-        }
-    }*/
-
-    // Gets and prints data
-    char *attribute1 = "";
-    char *attribute2 = "";
-    int printable = 0;
-    int i = 0;
-    char *lineCopy = "";
-    char *lineCopy2 = "";
+    // Get and print data
+    char *attribute1 = (char *) malloc(256 * sizeof(char));
+    char *attribute2 = (char *) malloc(256 * sizeof(char));
+    int targetColumnNum;
+    int currentColumnNum;
+    int printable;
     while ((fgets(line, MAX_DATA - 1, inFile) != NULL) && (strcmp(line, "\n"))) {
-        lineCopy = strdup(line);
-        lineCopy2 = strdup(line);
-        
-        // Gets the relevant attributes from the current line
-        attribute1 = strtok(lineCopy, lineDelim);
-        i = 0;
-        while (i < columnNum) {
-            attribute1 = strtok(NULL, lineDelim);
-            i++;
-        }
-        lineCopy = strdup(line);
-
-        if (attribute2isConstant) {
-            attribute2 = strdup(mainCondition->operand2);
-        } else {
-            attribute2 = strtok(lineCopy2, lineDelim);
-            i = 0;
-            while (i < columnNum2) {
-                attribute2 = strtok(NULL, lineDelim);
-                i++;
+        // Get attributes
+        if ('#' == mainCondition->operand1[0]) { // operand1 is a column number
+            targetColumnNum = atoi(mainCondition->operand1 + 1);
+            lineCopy = strdup(line);
+            currentAttr = strtok(lineCopy, lineDelim);
+            while (currentColumnNum < targetColumnNum) {
+                currentAttr = strtok(NULL, lineDelim);
+                currentColumnNum++;
             }
-        }
-        lineCopy2 = strdup(line);
 
-        // Determines whether the current line meets the condition
+            attribute1 = currentAttr;
+        } else if (isNumber(mainCondition->operand1)) { // operand1 is a constant number
+            strcpy(attribute1, mainCondition->operand1);
+        } else if (('"' == mainCondition->operand1[0] && '"' == mainCondition->operand1[-1 + strlen(mainCondition->operand1)]) || 
+                ('\'' == mainCondition->operand1[0] && '\'' == mainCondition->operand1[-1 + strlen(mainCondition->operand1)])) { // operand1 is a constant string
+            strncpy(attribute1, 1 + mainCondition->operand1, -2 + strlen(mainCondition->operand1));
+        } else { // operand1 is invalid
+            fprintf(stderr, unknownErrorMessage);
+
+            free(attribute1);
+            free(attribute2);
+
+            Condition_destroy(mainCondition);
+            free(inFile);
+            free(outFile);
+            
+            return 1;
+        }
+
+        if ('#' == mainCondition->operand2[0]) { // operand2 is a column number
+            targetColumnNum = atoi(mainCondition->operand2 + 1);
+            lineCopy = strdup(line);
+            currentAttr = strtok(lineCopy, lineDelim);
+            while (currentColumnNum < targetColumnNum) {
+                currentAttr = strtok(NULL, lineDelim);
+                currentColumnNum++;
+            }
+
+            attribute2 = currentAttr;
+        } else if (isNumber(mainCondition->operand2)) { // operand2 is a constant number
+            strcpy(attribute2, mainCondition->operand2);
+        } else if (('"' == mainCondition->operand2[0] && '"' == mainCondition->operand2[-1 + strlen(mainCondition->operand2)]) || 
+                ('\'' == mainCondition->operand2[0] && '\'' == mainCondition->operand2[-1 + strlen(mainCondition->operand2)])) { // operand2 is a constant string
+            strncpy(attribute2, 1 + mainCondition->operand2, -2 + strlen(mainCondition->operand2));
+        } else { // operand2 is invalid
+            fprintf(stderr, unknownErrorMessage);
+
+            free(attribute1);
+            free(attribute2);
+
+            Condition_destroy(mainCondition);
+            free(inFile);
+            free(outFile);
+            
+            return 1;
+        }
+
         printable = 0;
         if (!strcmp(mainCondition->operator, "==")) {
             printable = !strcmp(attribute1, attribute2);
         } else if (!strcmp(mainCondition->operator, "<")) {
-            printable = atoi(attribute1) < atoi(attribute2);
+            if (isNumber(attribute1) && isNumber(attribute2)) {
+                printable = atof(attribute1) < atof(attribute2);
+            } else {
+                printable = strcmp(attribute1, attribute2) < 0;
+            }
         } else if (!strcmp(mainCondition->operator, "<=")) {
-            printable = atoi(attribute1) <= atoi(attribute2);
+            if (isNumber(attribute1) && isNumber(attribute2)) {
+                printable = atof(attribute1) <= atof(attribute2);
+            } else {
+                printable = strcmp(attribute1, attribute2) <= 0;
+            }
         } else if (!strcmp(mainCondition->operator, ">")) {
-            printable = atoi(attribute1) > atoi(attribute2);
+            if (isNumber(attribute1) && isNumber(attribute2)) {
+                printable = atof(attribute1) > atof(attribute2);
+            } else {
+                printable = strcmp(attribute1, attribute2) > 0;
+            }
         } else if (!strcmp(mainCondition->operator, ">=")) {
-            printable = atoi(attribute1) >= atoi(attribute2);
+            if (isNumber(attribute1) && isNumber(attribute2)) {
+                printable = atof(attribute1) >= atof(attribute2);
+            } else {
+                printable = strcmp(attribute1, attribute2) >= 0;
+            }
         } else {
-            printable = 0;
+            fprintf(stderr, unknownErrorMessage);
+
+            free(attribute1);
+            free(attribute2);
+
+            Condition_destroy(mainCondition);
+            free(inFile);
+            free(outFile);
+
+            return 1;
         }
 
-        // Prints the current line if it's supposed to be printed
+        // Print the current line if it's supposed to be printed
         if (printable) {
             fprintf(outFile, "%s", line);
         }
     }
+    free(attribute1);
+    free(attribute2);
 
-    // Frees resources
+    // Free resources
     Condition_destroy(mainCondition);
     fclose(inFile);
     fclose(outFile);
 
-    // Returns
+    // Return
     return 0;
 }
 
