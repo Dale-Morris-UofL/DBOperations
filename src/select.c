@@ -91,6 +91,7 @@ int main(int argc, char *argv[]) {
     char line[MAX_DATA];
     char *lineCopy;
     const char *lineDelim = ",";
+    char *header;
     char *currentAttr;
     int attrNum;
     char *attrNumString = (char *) malloc(32 * sizeof(char));
@@ -100,6 +101,7 @@ int main(int argc, char *argv[]) {
 
     if (hasHeader) {
         fgets(line, MAX_DATA - 1, inFile);
+        header = strdup(line);
 
         if (!isNumber(mainCondition->operand1) && (('"' != mainCondition->operand1[0]) && ('\'' != mainCondition->operand1[0]))) {
             // Set attribute info
@@ -138,8 +140,8 @@ int main(int argc, char *argv[]) {
             strcpy(mainCondition->operand2, "#");
             strcat(mainCondition->operand2, attrNumString);
         }
-    } else if ((!isNumber(mainCondition->operand1) && (('"' != mainCondition->operand1[0]) && ('\'' != mainCondition->operand1[0]))) ||
-            (!isNumber(mainCondition->operand2) && (('"' != mainCondition->operand2[0]) && ('\'' != mainCondition->operand2[0])))) {
+    } else if ((!isColumnNumber(mainCondition->operand1) && !isNumber(mainCondition->operand1) && !isInQuotes(mainCondition->operand1)) ||
+            (!isColumnNumber(mainCondition->operand2) && !isNumber(mainCondition->operand2) && !isInQuotes(mainCondition->operand2))) {
         fprintf(stderr, "%s\n", invalidConditionMessage);
 
         free(attrNumString);
@@ -184,6 +186,9 @@ int main(int argc, char *argv[]) {
     int currentColumnNum;
     int printable;
 
+    if (hasHeader) {
+        fprintf(outFile, "%s", header);
+    }
     while ((fgets(line, MAX_DATA - 1, inFile) != NULL) && (strcmp(line, "\n"))) {
         // Get attributes
         if (isColumnNumber(mainCondition->operand1)) { // operand1 is a column number
@@ -290,7 +295,7 @@ int main(int argc, char *argv[]) {
             if (stdout != outFile) {
                 fclose(outFile);
             }
-            
+
             return 1;
         }
 
@@ -375,7 +380,7 @@ int isNumber(char *string) {
 }
 
 int isColumnNumber(char *string) {
-    return (('#' == string[0]) && (strlen(string) > 1) && isNumber(1 + string));
+    return ((strlen(string) > 1) && ('#' == string[0]) && (isNumber(1 + string)));
 }
 
 int isInQuotes(char *string) {
