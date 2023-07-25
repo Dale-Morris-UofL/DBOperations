@@ -1,18 +1,30 @@
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "condition.h"
-
 #define MAX_DATA 1024
 
+typedef struct Condition {
+    char *operator;
+    char *operand1;
+    char *operand2;
+} Condition;
+
+Condition *interpretCondition(char *conditionString);
+Condition *copyCondition(Condition *condition);
+void Condition_destroy(Condition *condition);
+
 int isNumber(char *string);
+int isColumnNumber(char *string);
+int isInQuotes(char *string);
+int isOperator(char *string);
 
 int main(int argc, char *argv[]) {
     // Preset messages
-    const char *usageMessage = "Usage: %s -c condition [-h] [-i input-file] [-o output-file]";
+    const char *usageMessage = "Usage: select -c condition [-h] [-i input-file] [-o output-file]";
     const char *invalidConditionMessage = "Invalid condition";
     const char *unknownErrorMessage = "An unknown error has occurred";
 
@@ -40,16 +52,16 @@ int main(int argc, char *argv[]) {
                 outFileName = strdup(optarg);
                 break;
             case ':':
-                fprintf(stderr, usageMessage, argv[0]);
+                fprintf(stderr, "%s\n", usageMessage);
                 return 1;
             case '?':
-                fprintf(stderr, usageMessage, argv[0]);
+                fprintf(stderr, "%s\n", usageMessage);
                 return 1;
         }
     }
 
     if ((!strcmp("", conditionString)) || (optind < argc)) {
-        fprintf(stderr, usageMessage, argv[0]);
+        fprintf(stderr, "%s\n", usageMessage);
         return 1;
     }
 
@@ -62,7 +74,9 @@ int main(int argc, char *argv[]) {
 
     if (inFile == NULL) {
         fprintf(stderr, "File cannot be opened\n");
-        fclose(inFile);
+        if (stdin != inFile) {
+            fclose(inFile);
+        }
 
         return 1;
     }
@@ -87,7 +101,7 @@ int main(int argc, char *argv[]) {
     if (hasHeader) {
         fgets(line, MAX_DATA - 1, inFile);
 
-        if (!isNumber(mainCondition->operand1) && ('"' != mainCondition->operand1[0] && '\'' != mainCondition->operand1[0])) {
+        if (!isNumber(mainCondition->operand1) && (('"' != mainCondition->operand1[0]) && ('\'' != mainCondition->operand1[0]))) {
             // Set attribute info
             lineCopy = strdup(line);
             currentAttr = strtok(lineCopy, lineDelim);
@@ -106,7 +120,7 @@ int main(int argc, char *argv[]) {
             strcat(mainCondition->operand1, attrNumString);
         }
 
-        if (!isNumber(mainCondition->operand2) && ('"' != mainCondition->operand2[0] && '\'' != mainCondition->operand2[0])) {
+        if (!isNumber(mainCondition->operand2) && (('"' != mainCondition->operand2[0]) && ('\'' != mainCondition->operand2[0]))) {
             // Set attribute info
             lineCopy = strdup(line);
             currentAttr = strtok(line, lineDelim);
@@ -124,36 +138,41 @@ int main(int argc, char *argv[]) {
             strcpy(mainCondition->operand2, "#");
             strcat(mainCondition->operand2, attrNumString);
         }
-    } else if ((!isNumber(mainCondition->operand1) && ('"' != mainCondition->operand1[0] && '\'' != mainCondition->operand1[0])) ||
-            (!isNumber(mainCondition->operand2) && ('"' != mainCondition->operand2[0] && '\'' != mainCondition->operand2[0]))) {
-        fprintf(stderr, invalidConditionMessage);
+    } else if ((!isNumber(mainCondition->operand1) && (('"' != mainCondition->operand1[0]) && ('\'' != mainCondition->operand1[0]))) ||
+            (!isNumber(mainCondition->operand2) && (('"' != mainCondition->operand2[0]) && ('\'' != mainCondition->operand2[0])))) {
+        fprintf(stderr, "%s\n", invalidConditionMessage);
 
         free(attrNumString);
 
         Condition_destroy(mainCondition);
-        free(inFile);
-        free(outFile);
+        if (stdin != inFile) {
+            fclose(inFile);
+        }
+        if (stdout != outFile) {
+            fclose(outFile);
+        }
 
         return 1;
     }
     free(attrNumString);
 
     // Double check condition is valid
-    if (('#' != mainCondition->operand1[0] &&
+    if ((!isColumnNumber(mainCondition->operand1) &&
             !isNumber(mainCondition->operand1) && 
-            (('"' != mainCondition->operand1[0] || '"' != mainCondition->operand1[-1 + strlen(mainCondition->operand1)]) && 
-            ('\'' != mainCondition->operand1[0] || '\'' != mainCondition->operand1[-1 + strlen(mainCondition->operand1)]))) || 
-            ('#' != mainCondition->operand2[0] && 
+            !isInQuotes(mainCondition->operand1)) || 
+            (!isColumnNumber(mainCondition->operand2) && 
             !isNumber(mainCondition->operand2) && 
-            (('"' != mainCondition->operand2[0] || '"' != mainCondition->operand2[-1 + strlen(mainCondition->operand2)]) && 
-            ('\'' != mainCondition->operand2[0] || '\'' != mainCondition->operand2[-1 + strlen(mainCondition->operand2)]))) && 
-            (!strcmp("==", mainCondition->operator) || !strcmp("<", mainCondition->operator) || !strcmp("<=", mainCondition->operator) || 
-            !strcmp(">", mainCondition->operator) || !strcmp(">=", mainCondition->operator))) {
-        fprintf(stderr, invalidConditionMessage);
+            !isInQuotes(mainCondition->operand2)) || 
+            (!isOperator(mainCondition->operator))) {
+        fprintf(stderr, "%s\n", invalidConditionMessage);
 
         Condition_destroy(mainCondition);
-        free(inFile);
-        free(outFile);
+        if (stdin != inFile) {
+            fclose(inFile);
+        }
+        if (stdout != outFile) {
+            fclose(outFile);
+        }
 
         return 1;
     }
@@ -164,60 +183,69 @@ int main(int argc, char *argv[]) {
     int targetColumnNum;
     int currentColumnNum;
     int printable;
+
     while ((fgets(line, MAX_DATA - 1, inFile) != NULL) && (strcmp(line, "\n"))) {
         // Get attributes
-        if ('#' == mainCondition->operand1[0]) { // operand1 is a column number
+        if (isColumnNumber(mainCondition->operand1)) { // operand1 is a column number
             targetColumnNum = atoi(mainCondition->operand1 + 1);
             lineCopy = strdup(line);
             currentAttr = strtok(lineCopy, lineDelim);
+            currentColumnNum = 0;
             while (currentColumnNum < targetColumnNum) {
                 currentAttr = strtok(NULL, lineDelim);
                 currentColumnNum++;
             }
 
-            attribute1 = currentAttr;
+            attribute1 = strdup(currentAttr);
         } else if (isNumber(mainCondition->operand1)) { // operand1 is a constant number
             strcpy(attribute1, mainCondition->operand1);
-        } else if (('"' == mainCondition->operand1[0] && '"' == mainCondition->operand1[-1 + strlen(mainCondition->operand1)]) || 
-                ('\'' == mainCondition->operand1[0] && '\'' == mainCondition->operand1[-1 + strlen(mainCondition->operand1)])) { // operand1 is a constant string
+        } else if (isInQuotes(mainCondition->operand1)) { // operand1 is a constant string
             strncpy(attribute1, 1 + mainCondition->operand1, -2 + strlen(mainCondition->operand1));
         } else { // operand1 is invalid
-            fprintf(stderr, unknownErrorMessage);
+            fprintf(stderr, "%s\n", unknownErrorMessage);
 
             free(attribute1);
             free(attribute2);
 
             Condition_destroy(mainCondition);
-            free(inFile);
-            free(outFile);
+            if (stdin != inFile) {
+                fclose(inFile);
+            }
+            if (stdout != outFile) {
+                fclose(outFile);
+            }
             
             return 1;
         }
 
-        if ('#' == mainCondition->operand2[0]) { // operand2 is a column number
+        if (isColumnNumber(mainCondition->operand2)) { // operand2 is a column number
             targetColumnNum = atoi(mainCondition->operand2 + 1);
             lineCopy = strdup(line);
             currentAttr = strtok(lineCopy, lineDelim);
+            currentColumnNum = 0;
             while (currentColumnNum < targetColumnNum) {
                 currentAttr = strtok(NULL, lineDelim);
                 currentColumnNum++;
             }
 
-            attribute2 = currentAttr;
+            attribute2 = strdup(currentAttr);
         } else if (isNumber(mainCondition->operand2)) { // operand2 is a constant number
             strcpy(attribute2, mainCondition->operand2);
-        } else if (('"' == mainCondition->operand2[0] && '"' == mainCondition->operand2[-1 + strlen(mainCondition->operand2)]) || 
-                ('\'' == mainCondition->operand2[0] && '\'' == mainCondition->operand2[-1 + strlen(mainCondition->operand2)])) { // operand2 is a constant string
+        } else if (isInQuotes(mainCondition->operand2)) { // operand2 is a constant string
             strncpy(attribute2, 1 + mainCondition->operand2, -2 + strlen(mainCondition->operand2));
         } else { // operand2 is invalid
-            fprintf(stderr, unknownErrorMessage);
+            fprintf(stderr, "%s\n", unknownErrorMessage);
 
             free(attribute1);
             free(attribute2);
 
             Condition_destroy(mainCondition);
-            free(inFile);
-            free(outFile);
+            if (stdin != inFile) {
+                fclose(inFile);
+            }
+            if (stdout != outFile) {
+                fclose(outFile);
+            }
             
             return 1;
         }
@@ -250,15 +278,19 @@ int main(int argc, char *argv[]) {
                 printable = strcmp(attribute1, attribute2) >= 0;
             }
         } else {
-            fprintf(stderr, unknownErrorMessage);
+            fprintf(stderr, "%s\n", unknownErrorMessage);
 
             free(attribute1);
             free(attribute2);
 
             Condition_destroy(mainCondition);
-            free(inFile);
-            free(outFile);
-
+            if (stdin != inFile) {
+                fclose(inFile);
+            }
+            if (stdout != outFile) {
+                fclose(outFile);
+            }
+            
             return 1;
         }
 
@@ -272,11 +304,50 @@ int main(int argc, char *argv[]) {
 
     // Free resources
     Condition_destroy(mainCondition);
-    fclose(inFile);
-    fclose(outFile);
+    if (stdin != inFile) {
+        fclose(inFile);
+    }
+    if (stdout != outFile) {
+        fclose(outFile);
+    }
 
     // Return
     return 0;
+}
+
+Condition *interpretCondition(char *conditionString) {
+    Condition *condition = malloc(sizeof(Condition));
+    const char *delim = " ";
+
+    condition->operand1 = strtok(conditionString, delim);
+    condition->operator = strtok(NULL, delim);
+    condition->operand2 = strtok(NULL, delim);
+
+    return condition;
+}
+
+Condition *copyCondition(Condition *condition) {
+    Condition *copy = malloc(sizeof(Condition));
+
+    copy->operator = strdup(condition->operator);
+    copy->operand1 = strdup(condition->operand1);
+    copy->operand2 = strdup(condition->operand2);
+
+    return copy;
+}
+
+void Condition_destroy(Condition *condition) {
+    assert(condition != NULL);
+
+    condition->operator = NULL;
+    condition->operand1 = NULL;
+    condition->operand2 = NULL;
+
+    free(condition->operator);
+    free(condition->operand1);
+    free(condition->operand2);
+
+    free(condition);
 }
 
 int isNumber(char *string) {
@@ -301,4 +372,16 @@ int isNumber(char *string) {
     }
 
     return 1;
+}
+
+int isColumnNumber(char *string) {
+    return (('#' == string[0]) && (strlen(string) > 1) && isNumber(1 + string));
+}
+
+int isInQuotes(char *string) {
+    return ((('"' == string[0]) && ('"' == string[-1 + strlen(string)])) || (('\'' == string[0]) && ('\'' == string[-1 + strlen(string)])));
+}
+
+int isOperator(char *string) {
+    return (!strcmp("==", string) || !strcmp("<", string) || !strcmp("<=", string) || !strcmp(">", string) || !strcmp(">=", string));
 }
