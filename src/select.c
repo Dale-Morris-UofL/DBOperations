@@ -26,7 +26,9 @@ int main(int argc, char *argv[]) {
     // Preset messages
     const char *usageMessage = "Usage: select -c condition [-h] [-i input-file] [-o output-file]";
     const char *invalidConditionMessage = "Invalid condition";
+    const char *invalidFileMessage = "File cannot be opened";
     const char *unknownErrorMessage = "An unknown error has occurred";
+    const char *attributeNotFoundMessage = "Attribute could not be found";
 
     // Get args
     int opt;
@@ -73,7 +75,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (inFile == NULL) {
-        fprintf(stderr, "File cannot be opened\n");
+        fprintf(stderr, "%s\n", invalidFileMessage);
         if (stdin != inFile) {
             fclose(inFile);
         }
@@ -88,7 +90,8 @@ int main(int argc, char *argv[]) {
     }
 
     // Get condition
-    char line[MAX_DATA];
+    char preline[MAX_DATA];
+    char *line = (char *) malloc((MAX_DATA - 1) * sizeof(char));
     char *lineCopy;
     const char *lineDelim = ",";
     char *header;
@@ -100,16 +103,33 @@ int main(int argc, char *argv[]) {
     mainCondition = interpretCondition(conditionString);
 
     if (hasHeader) {
-        fgets(line, MAX_DATA - 1, inFile);
+        fgets(preline, MAX_DATA - 1, inFile);
+        memset(line, '\0', strlen(line));
+        strncpy(line, preline, -1 + strlen(preline));
+        memset(preline, '\0', strlen(preline));
         header = strdup(line);
 
-        if (!isNumber(mainCondition->operand1) && (('"' != mainCondition->operand1[0]) && ('\'' != mainCondition->operand1[0]))) {
+        if (!isNumber(mainCondition->operand1) && (!isInQuotes(mainCondition->operand1)) && (!isColumnNumber(mainCondition->operand1))) {
             // Set attribute info
             lineCopy = strdup(line);
             currentAttr = strtok(lineCopy, lineDelim);
             attrNum = 0;
             while (strcmp(currentAttr, mainCondition->operand1)) {
                 currentAttr = strtok(NULL, lineDelim);
+                if (currentAttr == NULL) {
+                    fprintf(stderr, "%s\n", attributeNotFoundMessage);
+
+                    Condition_destroy(mainCondition);
+                    if (stdin != inFile) {
+                        fclose(inFile);
+                    }
+                    if (stdout != outFile) {
+                        fclose(outFile);
+                    }
+
+                    return 1;
+                }
+
                 attrNum++;
             }
             free(lineCopy);
@@ -122,13 +142,27 @@ int main(int argc, char *argv[]) {
             strcat(mainCondition->operand1, attrNumString);
         }
 
-        if (!isNumber(mainCondition->operand2) && (('"' != mainCondition->operand2[0]) && ('\'' != mainCondition->operand2[0]))) {
+        if (!isNumber(mainCondition->operand2) && (!isInQuotes(mainCondition->operand2)) && (!isColumnNumber(mainCondition->operand2))) {
             // Set attribute info
             lineCopy = strdup(line);
             currentAttr = strtok(line, lineDelim);
             attrNum = 0;
             while (strcmp(currentAttr, mainCondition->operand2)) {
                 currentAttr = strtok(NULL, lineDelim);
+                if (currentAttr == NULL) {
+                    fprintf(stderr, "%s\n", attributeNotFoundMessage);
+
+                    Condition_destroy(mainCondition);
+                    if (stdin != inFile) {
+                        fclose(inFile);
+                    }
+                    if (stdout != outFile) {
+                        fclose(outFile);
+                    }
+
+                    return 1;
+                }
+
                 attrNum++;
             }
             free(lineCopy);
@@ -187,10 +221,13 @@ int main(int argc, char *argv[]) {
     int printable;
 
     if (hasHeader) {
-        fprintf(outFile, "%s", header);
+        fprintf(outFile, "%s\n", header);
     }
-    while ((fgets(line, MAX_DATA - 1, inFile) != NULL) && (strcmp(line, "\n"))) {
+    while ((fgets(preline, MAX_DATA - 1, inFile) != NULL) && (strcmp(preline, "\n"))) {
         // Get attributes
+        memset(line, '\0', strlen(line));
+        strncpy(line, preline, -1 + strlen(preline));
+        memset(preline, '\0', strlen(preline));
         if (isColumnNumber(mainCondition->operand1)) { // operand1 is a column number
             targetColumnNum = atoi(mainCondition->operand1 + 1);
             lineCopy = strdup(line);
@@ -301,7 +338,7 @@ int main(int argc, char *argv[]) {
 
         // Print the current line if it's supposed to be printed
         if (printable) {
-            fprintf(outFile, "%s", line);
+            fprintf(outFile, "%s\n", line);
         }
     }
     free(attribute1);
