@@ -1,0 +1,5 @@
+id,Date,AveragePrice,TotalVolume,4046,4225,4770,TotalBags,SmallBags,LargeBags,XLargeBags,type,year,region
+1,2015-12-20,1,54876,674,44638,58,9505,9408,97,0,conventional,2015,Albany
+7,2015-11-08,0,109428,703,101815,80,6829,6266,562,0,conventional,2015,Albany
+17,2015-08-30,1,105693,689,94362,335,10306,10218,87,0,conventional,2015,Albany
+18,2015-08-23,1,79992,733,67933,444,10880,10745,134,0,conventional,2015,Utica
